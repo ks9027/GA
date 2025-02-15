@@ -1,0 +1,179 @@
+초기 염색체 생성 연산
+
+population 중 90%는 무작위 해, 10%는 stochastic-greedy 해  한다음 이 둘을 2-opt 한 걸 initial population
+
+적합도 계산 함수
+
+전체 주행 거리
+
+적합도 기반의 염색체 선택 연산
+
+룰렛 휠 선택 방식 + 엘리트 
+
+선택된 염색체에 대한 자손 생성 연산(크로스오버)
+
+하이브리드 크로스오버 서브1, 서브2의 조합으로 가자
+
+돌연변이 (mutation) 생성 연산
+
+스왑 50% 휴리스틱 스왑 50%
+
+경로의 제약조건
+1. load 0 
+2. bcr 95%부터 시작
+3. bcr 15% 이상에서의 경로를 만들어야함 (100~20%)라고 설정해도 되긴함
+
+python evrp.py -p ./benchmarks/evrp-2019/E-n22-k412.evrp -a GSGA -o ./results/GSGA/ -n 10 --seed 42
+
+python evrp.py -p ./benchmarks/evrp-2019/E-n101-k20.evrp -a GSGA -o ./results/GSGA/ -n 10 --seed 42
+
+python OR_evrp.py -p ./benchmarks/evrp-2019/E-n22-k4.evrp -a GSGA -o ./results/GSGA/ -n 10 --seed 42
+
+    def init_solution(self) -> Solution:
+        self.init_counter += 1  # 카운터 증가
+        solution = self.stochastic_greedy_solution()
+        if self.init_counter % 50 == 0:
+            logger.debug(f"[{self.init_counter}] Initial solution generated: {solution}")
+        return solution
+    
+    def optimize(self, solution: Solution) -> Solution:
+        self.init_counter += 1  # 카운터 증가
+        solution = self.local_search(solution)
+        if self.init_counter % 50 == 0:
+            logger.debug(f"[{self.init_counter}] local search solution generated: {solution}")
+        solution = self.insert_depots(solution)
+        if self.init_counter % 50 == 0:
+            logger.debug(f"[{self.init_counter}] insert depots solution generated: {solution}")
+        solution.set_tour_length(self.problem.calculate_tour_length(solution))
+        return solution
+
+    def aox_crossover(self, parent_1: Solution, parent_2: Solution) -> Solution:
+        parent_1_tours = parent_1.get_basic_tours()  # depot 제외 서브 투어
+        parent_2_tours = parent_2.get_basic_tours()
+            
+        # 디버깅 출력에서만 Node ID로 변환
+        parent_1_tours_ids = [[node.id for node in tour] for tour in parent_1_tours]
+        parent_2_tours_ids = [[node.id for node in tour] for tour in parent_2_tours]
+        logger.debug(f"Parent 1 Tours: {parent_1_tours_ids}")
+        logger.debug(f"Parent 2 Tours: {parent_2_tours_ids}")
+            
+        # 랜덤 고객 노드 선택
+        rd_node_id = choice(self.problem.get_all_customers()).get_id()
+        logger.debug(f"Random Node ID: {rd_node_id}")
+        
+        # 서브 투어 ID 찾기
+        id1 = parent_1.tour_index[rd_node_id]
+        id2 = parent_2.tour_index[rd_node_id]
+        logger.debug(f"ID1: {id1}, ID2: {id2}")
+        
+        # 선택된 서브 투어 추출
+        tour1 = parent_1_tours[id1]
+        tour2 = parent_2_tours[id2]
+        # 디버깅 로그에서만 Node ID로 변환
+        tour1_ids = [node.id for node in tour1]
+        tour2_ids = [node.id for node in tour2]
+        logger.debug(f"Tour1: {tour1_ids}")
+        logger.debug(f"Tour2: {tour2_ids}")
+        
+        # 자식 초기화
+        child_1 = [None] * len(parent_1.to_array())
+        child_2 = [None] * len(parent_2.to_array())
+        logger.debug(f"Initialized Child 1: {child_1}")
+        logger.debug(f"Initialized Child 2: {child_2}") 
+
+        # 부모 1과 부모 2에서 서브 투어의 시작 위치 찾기
+        start1 = parent_1.to_array().tolist().index(tour1[0].get_id())  # Node -> Node ID
+        end1 = start1 + len(tour1) - 1
+        start2 = parent_2.to_array().tolist().index(tour2[0].get_id())  # Node -> Node ID
+        end2 = start2 + len(tour2) - 1
+        logger.debug(f"Start1: {start1}, End1: {end1}")
+        logger.debug(f"Start2: {start2}, End2: {end2}")
+        
+        # 서브 투어 복사 (부모의 위치에 맞게 자식에 복사)
+        child_1[start1:end1 + 1] = tour1
+        child_2[start2:end2 + 1] = tour2
+        # 서브 투어 복사 (부모의 위치에 맞게 자식에 복사)
+        child_1[start1:end1 + 1] = tour1
+        child_2[start2:end2 + 1] = tour2
+        logger.debug(f"Child 1 After Tour1 Copy: {[node.id if node else None for node in child_1]}")
+        logger.debug(f"Child 2 After Tour2 Copy: {[node.id if node else None for node in child_2]}")
+        
+        # 고정된 값
+        fixed1 = tour1
+        fixed2 = tour2
+        # 고정된 값
+        fixed1 = tour1
+        fixed2 = tour2
+        logger.debug(f"Fixed1: {[node.id for node in fixed1]}")
+        logger.debug(f"Fixed2: {[node.id for node in fixed2]}")
+        
+        # P2에서 fixed1 중 가장 뒤에 있는 값 이후부터 복사
+        max_idx1 = max(idx for idx, val in enumerate(parent_2.to_array()) if val in fixed1)
+        current_idx1 = (max_idx1 + 1) % len(parent_2.to_array())
+        logger.debug(f"MaxIdx1: {max_idx1}, CurrentIdx1: {current_idx1}")
+        
+        # P1에서 fixed2 중 가장 뒤에 있는 값 이후부터 복사
+        max_idx2 = max(idx for idx, val in enumerate(parent_1.to_array()) if val in fixed2)
+        current_idx2 = (max_idx2 + 1) % len(parent_1.to_array())
+        logger.debug(f"MaxIdx2: {max_idx2}, CurrentIdx2: {current_idx2}")
+        
+        # 자식 1 생성 (P2에서 고정 구간 이후 복사)
+        fill_idx = (end1 + 1) % len(child_1)  # 고정 구간 바로 뒤부터 채우기 시작
+        for _ in range(len(parent_1.to_array())):
+            if child_1[fill_idx] is None:
+                while parent_2.to_array()[current_idx1] in fixed1 or parent_2.to_array()[current_idx1] in child_1:
+                    current_idx1 = (current_idx1 + 1) % len(parent_2.to_array())
+                child_1[fill_idx] = parent_2.to_array()[current_idx1]
+                fill_idx = (fill_idx + 1) % len(child_1)
+                current_idx1 = (current_idx1 + 1) % len(parent_2.to_array())
+        logger.debug(f"Child 1 After Filling: {child_1}")
+        
+        # 자식 2 생성 (P1에서 고정 구간 이후 복사)
+        fill_idx = (end2 + 1) % len(child_2)
+        for _ in range(len(parent_2.to_array())):
+            if child_2[fill_idx] is None:
+                while parent_1.to_array()[current_idx2] in fixed2 or parent_1.to_array()[current_idx2] in child_2:
+                    current_idx2 = (current_idx2 + 1) % len(parent_1.to_array())
+                child_2[fill_idx] = parent_1.to_array()[current_idx2]
+                fill_idx = (fill_idx + 1) % len(child_2)
+                current_idx2 = (current_idx2 + 1) % len(parent_1.to_array())
+        logger.debug(f"Child 2 After Filling: {child_2}")
+        
+        return Solution([child_1]), Solution([child_2])
+
+2025-01-16 08:27:30.715 | DEBUG    | algorithms.debug_GSGA:aox_crossover:235 - Child 1 After Filling: [4, 3, 6, 8, 9, 2, 5, 7, 1]
+2025-01-16 08:27:30.716 | DEBUG    | algorithms.debug_GSGA:aox_crossover:247 - Child 2 After Filling: [1, 2, 6, 8, 5, 7, 4, 3, 9]
+
+이렇게 각 child의 crossover 단계가 끝나고 이를 sub-tour로 나눠주는 역할을 하는 단계를 설정할건데 
+일단 child 1의 예시로 들면
+첫 node가 4잖아. 그러면 depot에서 4까지 가는데 필요한 load와 battery_needed 의 양을 계산해주는거지
+여기서 battery needed는 depot에서 본인 노드까지 오는데 걸리는 누적 배터리량 + 다음 노드까지 갔다가 depot으로 갈 수 있는 배터리량을 의미해
+그다음에 제약에 걸리지 않으면 바로 다음 노드로 넘어가 여기에서는 3으로 넘어가는거지 
+3에서도 node 4에서 했던 행위를 반복해서 제약에 무리가 없으면 다음 행위를 시작해
+여기서 말하는 다음 행위란 depot에서 출발해서 도착하는 첫 노드일 경우를 제외한 경우에서만 하는거야. 
+나는 이제부터 depot에서 출발해서 도착하는 첫 노드를 predecessor이라고 할게
+
+그럼 predecessor이 아닌 경우에는 제약조건을 확인 후 어떤 행위를 하느냐
+내가 지금 depot으로 가는 것이 경로 최적화에 도움이 되는것인지, 아니면 다음 노드로 가는 것이 경로 최적화에 도움이 되는 것인지 판별을 하는 행위를 말해
+지금 경우에는 내가 3에 있으니 현재  depot으로 간다음 node 6으로 가는것이  최소 경로를 만드는데 도움이 되는건지
+아니면 node 6으로 직행한 후 다음 행위를 하는것이 최소 경로를 만드는데 도움이 되는건지 확인을 하는 행위이지
+
+이때 확인을 하기 위해서는 거리 비교를 해야돼.
+만약 node3 방문후 depot을 방문한다면 이때에는 043068 --이 되겠지. 이 경우를 way1이라 할게
+그런데 node 3 방문후 노드 6을 방문한다면 043608 --이 되겠지. 이 경우를 way2이라 할게
+
+즉 우리가 여기서 비교해야 하는 노드 way1과 way2가 차별되는 경로는 way1의 (3,0)의 거리와 (6,8)거리의 합과 way2의 (3,6)의 거리와 (0,8)거리의 합을 비교해서 작은 경로값을 나타내는 way가 더 경로를 최소화함을 알고 그 경로를 채택하는거야
+
+이 단계를 comparing_way라고 할때 내가 현재 있는  노드 3을 i 다음노드 6을 i+1라고 했을때 way1에서는 (i,0)의 거리와 (i+1,i+2) 거리의 합을 way2에서는 (i,i+1)의 거리와 (0,i+2)거리 합을 비교하는거지
+
+근데 만약 i+2가 없다면, 즉 child 1을 예시로 들어 node 7같은 경우엔 i+1이 1이고 i+2는 없지? 이 경우에는 way1 에서는 (i,0)의 거리와 (0,i+1)의 거리의 합을 way2에서는 (i,i+1) 의 거리를 비교하는거지
+
+i+1이 없는 경우 즉 child 1에서 1인 경우에는 그냥 비교할것도 없이 depot으로 복귀하면돼
+
+근데 일단 이 단계를 가기 위해서 아까 내가 말했다시피 배터리와 load조건을 만족해야돼 이걸 만족하지 못하면 일단 바로 depot으로 복귀해야 하는거야
+
+즉 sub-tour를 split하기 위해서는 위의 과정이 반복되어야 하고 
+
+depot에서 출발해서 도착하는 첫 노드를 predecessor 노드라고 하며 이 노드부터 sub-tour가 시작되고 depot으로 복귀하기 바로 전 node가 이 sub-tour의 마지막 노드가 돼
+그래서 aox_crossover 함수의 마지막에 이 과정을 넣어주고 sub-tour별로 list가 나뉘어서 [list[list[node]]]의 형태로 값이 산출될 수 있도록 해줘
+그리고 각 sub-tour에 포함된 노드의 인덱스도 설정해주는 과정을 맨 마지막에 넣어줘
